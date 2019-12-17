@@ -1,0 +1,335 @@
+#include <16F887A.h>
+#device ADC=10 //Resolución de 10 bits
+#fuses XT,NOWDT,NOPROTECT,NOLVP,PUT,BROWNOUT
+#use delay(clock=4000000) //Frecuencia de Cristal de 4MHz
+
+#use fast_io(A)
+#use fast_io(B)
+#use fast_io(C)
+#use fast_io(D)
+
+//--------------------------------------
+//Declaración de variables
+//--------------------------------------
+
+//Tipo  Variables 
+float lectura; 		   //Lectura análoga   
+float distancia;  	   //Distancia en cm
+int8  dig;             //Conversión A-D
+int8  vel1,vel2;  	   //PWM 
+int8  x1,x2,x3,x4,x5;  //Movimiento
+
+//Tipo  Variables 
+int8  on=PIN_D0;	   //Pulsador de encendido
+int8  inicio=0;  		
+int8  reset=PIN_D1;	   //Pulsador de reset
+int8  led_on=PIN_D7;   //Led de encendido
+
+int8  s_der=PIN_B0;	   //Sensor derecho
+int8  s_izq=PIN_A3;	   //Sensor izquierdo
+
+int8  ledF=PIN_B1;	   //Led frontal
+int8  ledD=PIN_B3; 	   //Led derecho
+int8  ledI=PIN_A2;	   //Led izquierdo
+
+int8  motor1_a=PIN_C6; //Motor Izquierdo
+int8  motor1_r=PIN_C5;
+int8  motor2_a=PIN_C4; //Motor Derecho
+int8  motor2_r=PIN_C3;
+
+//-----------------------------------------
+//Funciones de lectura y escritura análoga
+//-----------------------------------------
+
+void leersenal(){ 	   
+	set_adc_channel(0);
+	delay_us(10);
+	lectura=read_adc();
+}
+
+void frontal(){
+
+	//80 = 30cm
+	//530 = 4cm
+
+	leersenal();
+
+	if(lectura >= 80 && lectura <= 530){
+		distancia=(2076)/(lectura-11);	
+	}
+	
+	//420=5cm
+	//215=10cm
+
+	if(lectura>=230){
+		dig=1;
+		output_bit(ledF,1);	
+	}else{
+		dig=0;
+		output_bit(ledF,0);
+	}
+
+}
+
+//--------------------------------------
+//Funciones para motores
+//--------------------------------------
+
+void detener(){
+
+	set_pwm1_duty(0);
+	set_pwm2_duty(0);
+	output_bit(motor1_a,0);
+	output_bit(motor2_a,0);
+	output_bit(motor1_r,0);
+	output_bit(motor2_r,0);	
+
+}
+
+void adelante(){
+
+	vel1=50;
+	vel2=48;
+	set_pwm1_duty(vel1);
+	set_pwm2_duty(vel2);
+	output_bit(motor1_a,1);
+	output_bit(motor2_a,1);
+	output_bit(motor1_r,0);
+	output_bit(motor2_r,0);
+
+}
+
+void derecha(){
+
+	set_pwm1_duty(80);
+	set_pwm2_duty(80);
+
+	output_bit(motor1_a,0);
+	output_bit(motor2_a,1);
+	output_bit(motor1_r,1);
+	output_bit(motor2_r,0);
+	delay_ms(190); 
+	
+	detener();
+	delay_ms(250);
+
+	adelante();
+	delay_ms(1000);
+
+	detener();
+	delay_ms(250);
+
+}
+
+void izquierda(){
+
+	set_pwm1_duty(80);
+	set_pwm2_duty(80);
+
+	output_bit(motor1_a,1);
+	output_bit(motor2_a,0);
+	output_bit(motor1_r,0);
+	output_bit(motor2_r,1);	
+	delay_ms(225);
+	
+	detener();
+	delay_ms(250);
+
+	adelante();
+	delay_ms(990);
+
+	detener();
+	delay_ms(250);
+
+}
+
+void encerrona(){
+
+	set_pwm1_duty(80);
+	set_pwm2_duty(80);
+
+	output_bit(motor1_a,0);
+	output_bit(motor2_a,1);
+	output_bit(motor1_r,1);
+	output_bit(motor2_r,0);
+	delay_ms(540);
+	
+	detener();
+	delay_ms(250);
+
+	adelante();
+	delay_ms(950);
+
+	detener();
+	delay_ms(250);
+
+}
+
+//--------------------------------------
+//Función indicador de sensado lateral
+//--------------------------------------
+
+void leds(){
+
+	if(Input(s_izq)==0){
+		output_bit(ledI,1);
+	}else{
+		output_bit(ledI,0);
+	}
+
+	if(Input(s_der)==0){
+		output_bit(ledD,1);
+	}else{
+		output_bit(ledD,0);
+	}
+
+}
+
+//--------------------------------------
+//Función de lectura de sensores
+//--------------------------------------
+
+void sensores(){
+
+frontal();
+
+//Dig=0 cuando la lectura análoga es > 10
+//Dig=1 cuando la lectura análoga es < 10
+
+	if(Input(s_izq)==0 && Input(s_der)==0 && dig==0){
+			lectura=0;
+			x1=1; //ADELANTE			
+
+	}else if(Input(s_izq)==0 && Input(s_der)==1 && dig==0){
+			lectura=0;
+			delay_ms(210);
+			x4=1; //DERECHA 		
+
+	}else if(Input(s_izq)==0 && Input(s_der)==0	&& dig==1){
+			lectura=0;
+			x5=1; //ENCERRONA					
+
+	}else if(Input(s_izq)==0 && Input(s_der)==1	&& dig==1){
+			lectura=0;
+			x4=1; //DERECHA
+
+	}else if(Input(s_izq)==1 && Input(s_der)==0 && dig==0){
+			lectura=0;
+			x2=1; //ADELANTE ESPECIAL			
+
+	}else if(Input(s_izq)==1 && Input(s_der)==0 && dig==1){
+			distancia=0;
+			x3=1; //IZQUIERDA			
+
+	}else if(Input(s_izq)==1 && Input(s_der)==1 && dig==0){
+			lectura=0;
+			x4=1; //DERECHA			
+
+	}else if(Input(s_izq)==1 && Input(s_der)==1 && dig==1){
+			lectura=0;
+			x4=1; //DERECHA 			
+	}	
+
+	leds();
+
+}
+
+void motores(){
+
+	//ADELANTE
+	while(x1==1){
+		lectura=0;
+		adelante();
+		x1=0;
+	}
+
+	//ADELANTE ESPECIAL
+	while(x2==1){
+		lectura=0;
+		adelante();
+		delay_ms(600);
+		x2=0;
+	}
+
+	//IZQUIERDA
+	while(x3==1){
+		lectura=0;
+		izquierda();
+		x3=0;
+	}
+
+	//DERECHA 
+	while(x4==1){
+		lectura=0;
+		derecha();
+		x4=0;
+	}
+
+	//ENCERRONA
+	while(x5==1){
+		lectura=0;
+		encerrona();
+		x5=0;	
+	}
+
+}
+
+void main(){
+
+	//--------------------------------------
+	//Configuración de puertos
+	//--------------------------------------
+	set_tris_A(0b001001);
+	set_tris_B(0b00000001);
+	set_tris_C(0x00);
+	set_tris_D(0x00000011);
+
+	//--------------------------------------
+	//Configuración análoga
+	//--------------------------------------
+	setup_adc(ADC_CLOCK_INTERNAL);
+	setup_adc_ports(AN0);
+
+	//--------------------------------------
+	//Configuración PWM
+	//--------------------------------------
+	setup_timer_2(T2_DIV_BY_4, 255,16); 
+	setup_ccp1(CCP_PWM);
+	setup_ccp2(CCP_PWM);  
+	set_pwm1_duty(0);
+	set_pwm2_duty(0);
+
+	//--------------------------------------
+	//Inicialización de salidas en cero
+	//--------------------------------------
+	output_bit(ledF,0);
+	output_bit(ledD,0);
+	output_bit(ledI,0);
+	output_bit(led_on,0);
+	output_C(0X00);	
+
+	while(True){
+
+		if(Input(on)==0){
+			delay_ms(150);
+			if(Input(on)==0){
+				delay_ms(2000);
+				inicio=1;
+			}
+		}
+	 
+		while(inicio==1){
+			output_bit(led_on,1);
+			sensores();
+			motores();	
+
+			if(Input(reset)==0){
+			 	output_A(0x00);
+				output_B(0x00);
+				output_C(0x00);
+				output_D(0x00);				
+				inicio=0;
+			}
+		}
+	}
+}
